@@ -1,0 +1,3 @@
+Attempting to load level...
+level.txt format is invalid (cannot read width/height)
+[CRITICAL ERROR] Failed to initialize: reading level dimensions

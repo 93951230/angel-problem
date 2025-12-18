@@ -466,7 +466,7 @@ int main(int, char**) {
         }
     }
 
-    // ---unnecessarily deallocate objects---
+    // ---unnecearily deallocate objects---
     #pragma region
 
     al_destroy_display(disp);
