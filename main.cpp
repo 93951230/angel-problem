@@ -150,7 +150,7 @@ struct Level {
         file.close();
         printf("Level loaded: %d x %d\n", width, height);
 
-        deviation = {(WINDOW_W-(scale*width*TILE_SIZE))/2, (WINDOW_H-(scale*height*TILE_SIZE))/2};
+        deviation = Vec2((WINDOW_W-(scale*width*TILE_SIZE))/2, (WINDOW_H-(scale*height*TILE_SIZE))/2);
     }
 
     bool is_valid_move(int x, int y) const {
@@ -200,14 +200,9 @@ struct Level {
             for (int y = 0; y < height; y++) {
                 if (grid[x][y] == TILE_VOID) continue;
 
-                // world-space top-left of tile
-                Vec2 world = {
-                    (double)x * TILE_SIZE,
-                    (double)y * TILE_SIZE
-                };
-
-                // screen-space top-left
-                Vec2 screen = affine(world);
+                Vec2 world = {(double)x * TILE_SIZE,(double)y * TILE_SIZE};
+                Vec2 screen1 = affine(Vec2((double)x * TILE_SIZE, (double)y * TILE_SIZE));
+                Vec2 screen2 = affine(Vec2((double)(x+1) * TILE_SIZE, (double)(y+1) * TILE_SIZE));
 
                 double size = TILE_SIZE * scale;
 
@@ -233,10 +228,10 @@ struct Level {
                 double factor = (al_get_time() - exist_since[x][y] >= 1)?1:pop(al_get_time() - exist_since[x][y]);
 
                 al_draw_filled_rectangle(
-                    screen.x,
-                    screen.y,
-                    screen.x + factor*size - 2 * scale,
-                    screen.y + factor*size - 2 * scale,
+                    screen1.x,
+                    screen1.y,
+                    screen2.x,
+                    screen2.y,
                     color
                 );
             }
@@ -246,23 +241,18 @@ struct Level {
             for (int y = 0; y < height; y++) {
                 if (grid[x][y] == TILE_VOID) continue;
 
-                // world-space top-left of tile
-                Vec2 world = {
-                    (double)x * TILE_SIZE,
-                    (double)y * TILE_SIZE
-                };
-
-                // screen-space top-left
-                Vec2 screen = affine(world);
+                Vec2 world = {(double)x * TILE_SIZE,(double)y * TILE_SIZE};
+                Vec2 screen1 = affine(Vec2((double)x * TILE_SIZE, (double)y * TILE_SIZE));
+                Vec2 screen2 = affine(Vec2((double)(x+1) * TILE_SIZE, (double)(y+1) * TILE_SIZE));
 
                 double size = TILE_SIZE * scale;
 
                 if (p.selected_pos.x == x && p.selected_pos.y == y) {
                     al_draw_rectangle(
-                        screen.x,
-                        screen.y,
-                        screen.x + size,
-                        screen.y + size,
+                        screen1.x,
+                        screen1.y,
+                        screen2.x,
+                        screen2.y,
                         al_map_rgb(255,232,105),
                         3 * scale
                     );
@@ -275,17 +265,17 @@ struct Level {
                     ALLEGRO_COLOR temp =  al_map_rgb(fac*255,fac*232,fac*105);
                     if (!p.is_valid_move(x,y) || !is_valid_move(x,y)) temp = al_map_rgb(fac*255/drop,fac*232/drop,fac*105/drop);
                     al_draw_rectangle(
-                        screen.x,
-                        screen.y,
-                        screen.x + size,
-                        screen.y + size,
+                        screen1.x,
+                        screen1.y,
+                        screen2.x,
+                        screen2.y,
                         temp,
                         3 * scale
                     );
                 }
             }
         }
-
+        
         // ---draw player---
         #pragma region
 
