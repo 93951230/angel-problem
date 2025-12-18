@@ -25,11 +25,19 @@
 #define TILE_VOID 4
 
 #define TILE_SIGN 6
-
+// GATE
 #define TILE_GATE_N 7
 #define TILE_GATE_S 8
 #define TILE_GATE_E 9
 #define TILE_GATE_W 10
+// Moving Tile
+#define TILE_MOVE_H 11
+#define TILE_MOVE_V 12
+// NGATE
+#define TILE_NGATE_N 13
+#define TILE_NGATE_S 14
+#define TILE_NGATE_E 15
+#define TILE_NGATE_W 16
 
 std::vector<int> is_space = {0,2,3,6};
 
@@ -139,8 +147,9 @@ struct Level {
     Vec2 deviation;
     int width, height;
     std::vector<std::vector<int>> grid;
+    std::vector<std::vector<int>> movdir;
     std::vector<std::vector<double>> anim_since;
-    Vec2 goal_pos;
+    std::string nextLvlName;
     
     Level() : width(0), height(0) {}
 
@@ -155,20 +164,23 @@ struct Level {
             if (input_hint.size() == 1 && 10 <= input_hint[0] && input_hint[0] <= 15) continue;
             if (input_hint == "tilemap") {
                 file >> width >> height;
+
                 grid.assign(width, std::vector<int>(height, 0));
                 player.validmpp.assign(width, std::vector<bool>(height, 0));
+                movdir.assign(width, std::vector<int>(height, 0));
                 anim_since.assign(width, std::vector<double>(height, 0));
+
                 int tile_id;
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
                         if (file >> tile_id) {
                             grid[x][y] = tile_id;
-                            if (tile_id == TILE_GOAL) {
-                                goal_pos = Vec2(x, y);
-                            } 
-                            else if (tile_id == TILE_PLAYER) {
+                            if (tile_id == TILE_PLAYER) {
                                 player.grid_pos = Vec2(x, y);
                                 player.selected_pos = Vec2(x, y);
+                            }
+                            else if (tile_id == TILE_MOVE_H || tile_id == TILE_MOVE_V) {
+                                movdir[x][y] = 1;
                             } 
                         }
                     }
@@ -192,6 +204,65 @@ struct Level {
         if (x < 0 || x >= width || y < 0 || y >= height) return false;
         if (find(is_space.begin(),is_space.end(),grid[x][y]) == is_space.end()) return false;
         return true;
+    }
+
+    void update_movers(const Player &player) {
+        static int next_grid[500][500];
+        static int next_movdir[500][500];
+
+        // initialize next state as empty
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                next_grid[x][y] = grid[x][y];
+                next_movdir[x][y] = 0;
+            }
+        }
+
+        // process movers
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+
+                if (!movdir[x][y]) continue;
+
+                int t = grid[x][y];
+                int dx = 0, dy = 0;
+
+                if (t == TILE_MOVE_H) dx = movdir[x][y];
+                else if (t == TILE_MOVE_V) dy = movdir[x][y];
+                else continue; // safety
+
+                int new_x = x + dx;
+                int new_y = y + dy;
+
+                bool blocked = false;
+
+                if (!is_valid_move(new_x, new_y))
+                    blocked = true;
+
+                if (new_x == (int)player.grid_pos.x &&
+                    new_y == (int)player.grid_pos.y)
+                    blocked = true;
+
+                if (blocked) {
+                    // stay, reverse direction
+                    next_grid[x][y] = t;
+                    next_movdir[x][y] = -movdir[x][y];
+                } else {
+                    // move
+                    next_grid[new_x][new_y] = t;
+                    next_movdir[new_x][new_y] = movdir[x][y];
+                    next_grid[x][y] = TILE_EMPTY;
+                }
+            }
+        }
+
+        // commit
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                grid[x][y] = next_grid[x][y];
+                movdir[x][y] = next_movdir[x][y];
+            }
+        }
     }
 
     void grow_walls(const Player& p) {
@@ -230,13 +301,15 @@ struct Level {
         };
     }
 
-    void trigger_gate() {
+    void trigger_gate(Player& p) {
         for (int x = 0; x < width; x++){
             for (int y = 0; y < height; y++){
                 int t = grid[x][y];
 
                 // skip if not gates
-                if (t < 7 || t > 10) continue;
+                if (!(7 <= t && t <= 10) && !(13 <= t && t <= 16)) continue;
+                bool isnot = (13 <= t && t <= 16);
+                if (isnot) t -= 6;
                 int dx = 0, dy = 0; // front dir
                 int bx = 0, by = 0; // back dir
                 if (t == TILE_GATE_N) { dy = -1; by = 1;}
@@ -256,11 +329,11 @@ struct Level {
                 double tt = 0;
                 while(cur_x >= 0 && cur_x < width && cur_y >= 0 && cur_y < height){
                     tt += 0.05;
-                    if (!is_valid_move(cur_x,cur_y)) break;
-                    if (grid[cur_x][cur_y] != tile_to_copy) {
-                        grid[cur_x][cur_y] = tile_to_copy;
-                        anim_since[cur_x][cur_y] = al_get_time() + tt;
-                    }
+                    if (grid[cur_x][cur_y] == tile_to_copy || (cur_x == p.grid_pos.x && cur_y == p.grid_pos.y)) break;
+                    grid[cur_x][cur_y] = tile_to_copy;
+                    if (movdir[cur_x][cur_y]) movdir[cur_x][cur_y] = 0;
+                    if (tile_to_copy == TILE_MOVE_H || tile_to_copy == TILE_MOVE_V) movdir[cur_x][cur_y] = 1;
+                    anim_since[cur_x][cur_y] = al_get_time() + tt;
                     cur_x += dx;
                     cur_y += dy;
                 }
@@ -292,20 +365,23 @@ struct Level {
 
 
                 ALLEGRO_COLOR color = al_map_rgb(20, 20, 20);
-                if (grid[x][y] == TILE_EMPTY) {
-                    color = al_map_rgb(20, 20, 20);
-                }
                 if (grid[x][y] == TILE_WALL) {
                     color = al_map_rgb(255,118,119);
                 } 
                 else if (grid[x][y] == TILE_GOAL) {
                     color = al_map_rgb(1,178,226);
                 }
-                else if (grid[x][y] == TILE_SIGN){
-					color = al_map_rgb(255, 255, 0);
-				}
-                else if (grid[x][y] >= TILE_GATE_N && grid[x][y] <= TILE_GATE_W){
+                else if (grid[x][y] == TILE_SIGN) {
+                    color = al_map_rgb(255, 255, 0);
+                }
+                else if (grid[x][y] >= TILE_GATE_N && grid[x][y] <= TILE_GATE_W) { 
                     color = al_map_rgb(170, 150, 226);
+                }
+                else if (grid[x][y] == TILE_MOVE_H) {
+                    color = al_map_rgb(255, 165, 0);
+                } 
+                else if (grid[x][y] == TILE_MOVE_V) {
+                    color = al_map_rgb(50, 205, 50);
                 }
 
                 al_draw_filled_rectangle(
@@ -316,18 +392,105 @@ struct Level {
                     color
                 );
 
-                if (grid[x][y] >= TILE_GATE_N && grid[x][y] <= TILE_GATE_W){
-                    double cx = (screen1.x + screen2.x)/2;
-                    double cy = (screen1.y + screen2.y)/2;
-                    double off = (screen2.x - screen1.x)/3;
+                if (grid[x][y] >= TILE_GATE_N && grid[x][y] <= TILE_GATE_W) {
 
-                    if (grid[x][y] == TILE_GATE_N) cy -= off;
-                    if (grid[x][y] == TILE_GATE_S) cy += off;
-                    if (grid[x][y] == TILE_GATE_W) cx -= off;
-                    if (grid[x][y] == TILE_GATE_E) cx += off;
+                    Vec2 tl = screen1;
+                    Vec2 tr(screen2.x, screen1.y);
+                    Vec2 bl(screen1.x, screen2.y);
+                    Vec2 br = screen2;
 
-                    al_draw_filled_circle(cx, cy, 3*scale, al_map_rgb(255,255,255));
+                    Vec2 center = (screen1 + screen2) * 0.5;
+                    double off = (screen2.x - screen1.x) / 3.0;
+
+                    Vec2 dir(0,0);
+                    Vec2 e1, e2;
+
+                    switch (grid[x][y]) {
+                        case TILE_GATE_N:
+                            dir = Vec2(0,-1);
+                            e1 = tl; e2 = tr;
+                            break;
+                        case TILE_GATE_S:
+                            dir = Vec2(0, 1);
+                            e1 = bl; e2 = br;
+                            break;
+                        case TILE_GATE_W:
+                            dir = Vec2(-1,0);
+                            e1 = tl; e2 = bl;
+                            break;
+                        case TILE_GATE_E:
+                            dir = Vec2(1, 0);
+                            e1 = tr; e2 = br;
+                            break;
+                    }
+
+                    Vec2 p = center + dir * off;
+
+                    // fill darker
+                    Vec2 re1 = e1 - dir * (2 * off);
+                    Vec2 re2= e2 - dir * (2 * off);
+                    double left   = std::min({e1.x, e2.x, re1.x, re2.x});
+                    double right  = std::max({e1.x, e2.x, re1.x, re2.x});
+                    double top    = std::min({e1.y, e2.y, re1.y, re2.y});
+                    double bottom = std::max({e1.y, e2.y, re1.y, re2.y});
+                    al_draw_filled_rectangle(
+                        left, top,
+                        right, bottom,
+                        al_map_rgb(150, 130, 196)
+                    );
+
+                    // carve the notch
+                    al_draw_filled_triangle(
+                        e1.x, e1.y,
+                        e2.x, e2.y,
+                        p.x,  p.y,
+                        al_map_rgb(20, 20, 20)
+                    );
                 }
+                else if (grid[x][y] == TILE_MOVE_H || grid[x][y] == TILE_MOVE_V) {
+                    double edge_thickness = 0.12 * (screen2.x - screen1.x);
+                    ALLEGRO_COLOR edge_dark = al_map_rgb(120, 90, 40);   // for H
+                    ALLEGRO_COLOR edge_dark_v = al_map_rgb(30, 140, 30); // for V
+
+                    if (grid[x][y] == TILE_MOVE_H) {
+                        color = al_map_rgb(255, 165, 0);
+                        al_draw_filled_rectangle(
+                            screen1.x,
+                            screen1.y,
+                            screen2.x,
+                            screen1.y + edge_thickness,
+                            edge_dark
+                        );
+
+                        al_draw_filled_rectangle(
+                            screen1.x,
+                            screen2.y - edge_thickness,
+                            screen2.x,
+                            screen2.y,
+                            edge_dark
+                        );
+                    } 
+                    else if (grid[x][y] == TILE_MOVE_V) {
+                        color = al_map_rgb(50, 205, 50);
+                        al_draw_filled_rectangle(
+                            screen1.x,
+                            screen1.y,
+                            screen1.x + edge_thickness,
+                            screen2.y,
+                            edge_dark_v
+                        );
+
+                        al_draw_filled_rectangle(
+                            screen2.x - edge_thickness,
+                            screen1.y,
+                            screen2.x,
+                            screen2.y,
+                            edge_dark_v
+                        );
+                    }
+                }
+
+
             }
         }
 
@@ -534,7 +697,7 @@ int main(int, char**) {
                     int gx = player.grid_pos.x, gy = player.grid_pos.y;
                     if (gx == 1 && gy == 2) {
                         state = PLAYING;
-                        level.load_level("level.txt",player);
+                        level.load_level("levels/level.txt",player);
                     }
                     if (gx == 3 && gy == 2) {
                         done = true;
@@ -544,14 +707,15 @@ int main(int, char**) {
                 else {
                     if (current_tile == TILE_GOAL) {
                         state = MENU;
-                        level.load_level("title_level.txt", player);
+                        level.load_level("./levels/title_level.txt", player);
                     } 
                     else if (current_tile == TILE_SIGN){
                         state = READING_SIGN;
                     }
                     else {
+                        level.update_movers(player);
+                        level.trigger_gate(player);
                         level.grow_walls(player);
-                        level.trigger_gate();
                     }
                 }
             }
@@ -611,16 +775,10 @@ int main(int, char**) {
 
                 double title_x = WINDOW_W / 2 - total_w / 2;
 
-                // draw
                 for (int i = 0; i < 4; i++) {
                     al_draw_text(title_font, colors[i], title_x, title_y, 0, parts[i]);
                     title_x += al_get_text_width(title_font, parts[i]);
                 }
-
-                // // Draw Start Button
-                // al_draw_filled_rectangle(btn_x, btn_y, btn_x + btn_w, btn_y + btn_h, al_map_rgb(100, 100, 100));
-                // al_draw_rectangle(btn_x, btn_y, btn_x + btn_w, btn_y + btn_h, al_map_rgb(255, 255, 255), 2);
-                // al_draw_text(info_font, al_map_rgb(255, 255, 255), WINDOW_W/2, btn_y + 20, ALLEGRO_ALIGN_CENTER, "START");
 
                 // Draw Instructions (Below Button)
                 double inst_y = WINDOW_H / 10;
@@ -638,9 +796,7 @@ int main(int, char**) {
                 al_draw_filled_rectangle(0, WINDOW_H-40-h, WINDOW_W, WINDOW_H-40, blue);
                 al_draw_filled_rectangle(0, WINDOW_H-40-h-off, WINDOW_W, WINDOW_H-40-off, blue);
 
-                // Draw Credit
-
-                // Draw Option
+                // Draw Option + Credit
                 if (player.grid_pos.y != 0) {
                     Vec2 play_opt_pos = level.affine(Vec2(1.5*TILE_SIZE, 2.5*TILE_SIZE));
                     al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), play_opt_pos.x, play_opt_pos.y, "[ Play ]",20);
