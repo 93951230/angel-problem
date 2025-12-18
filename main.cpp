@@ -31,6 +31,15 @@ using namespace std;
 #define TILE_PLAYER 3
 #define TILE_VOID 4
 
+#define TILE_SIGN 6
+
+#define TILE_GATE_N 7
+#define TILE_GATE_S 8
+#define TILE_GATE_E 9
+#define TILE_GATE_W 10
+
+std::vector<int> is_space = {0,2,3,6};
+
 #pragma endregion 
 
 // ===global variables===
@@ -40,7 +49,8 @@ using namespace std;
 enum GameState {
     MENU,
     LEVEL_SELECTING,
-    PLAYING
+    PLAYING,
+    READING_SIGN
 };
 unsigned char key[ALLEGRO_KEY_MAX];
 
@@ -94,6 +104,7 @@ struct Level {
     Vec2 deviation;
     int width, height;
     std::vector<std::vector<int>> grid;
+    std::vector<std::vector<double>> exist_since;
     Vec2 goal_pos;
     
     Level() : width(0), height(0) {}
@@ -111,6 +122,7 @@ struct Level {
                 file >> width >> height;
                 grid.assign(width, std::vector<int>(height, 0));
                 player.validmpp.assign(width, std::vector<bool>(height, 0));
+                exist_since.assign(width, std::vector<double>(height, 0));
                 int tile_id;
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
@@ -143,7 +155,7 @@ struct Level {
 
     bool is_valid_move(int x, int y) const {
         if (x < 0 || x >= width || y < 0 || y >= height) return false;
-        if (grid[x][y] != TILE_EMPTY && grid[x][y] != TILE_GOAL) return false;
+        if (find(is_space.begin(),is_space.end(),grid[x][y]) == is_space.end()) return false;
         return true;
     }
 
@@ -161,7 +173,10 @@ struct Level {
                 new_walls.push_back(Vec2(nx, ny));
             }
         }
-        for(auto& w : new_walls) grid[w.x][w.y] = TILE_WALL;
+        for(auto& w : new_walls) {
+            exist_since[w.x][w.y] = al_get_time();
+            grid[w.x][w.y] = TILE_WALL;
+        }
     }
 
     // return the affine map that makes tilemap centered
@@ -202,17 +217,46 @@ struct Level {
                 }
                 if (grid[x][y] == TILE_WALL) {
                     color = al_map_rgb(255,118,119);
-                } else if (grid[x][y] == TILE_GOAL) {
+                } 
+                else if (grid[x][y] == TILE_GOAL) {
                     color = al_map_rgb(1,178,226);
                 }
+                else if (grid[x][y] == TILE_SIGN){
+					color = al_map_rgb(255, 255, 0);
+				}
+
+                static auto pop = [&](double t) -> double {
+                    return (50.0f/21.0f)*t*t*t
+                        - (121.0f/21.0f)*t*t
+                        + (92.0f/21.0f)*t;
+                };
+                double factor = (al_get_time() - exist_since[x][y] >= 1)?1:pop(al_get_time() - exist_since[x][y]);
 
                 al_draw_filled_rectangle(
                     screen.x,
                     screen.y,
-                    screen.x + size - 2 * scale,
-                    screen.y + size - 2 * scale,
+                    screen.x + factor*size - 2 * scale,
+                    screen.y + factor*size - 2 * scale,
                     color
                 );
+            }
+        }
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                if (grid[x][y] == TILE_VOID) continue;
+
+                // world-space top-left of tile
+                Vec2 world = {
+                    (double)x * TILE_SIZE,
+                    (double)y * TILE_SIZE
+                };
+
+                // screen-space top-left
+                Vec2 screen = affine(world);
+
+                double size = TILE_SIZE * scale;
+
                 if (p.selected_pos.x == x && p.selected_pos.y == y) {
                     al_draw_rectangle(
                         screen.x,
@@ -226,11 +270,10 @@ struct Level {
                 else if (p.selecting_pos.x == x && p.selecting_pos.y == y) {
                     double t = al_get_time();
                     double offset = abs(fmod(t,M_PI));
-                    double fac = 0.75 + 0.35 * sin(offset);
+                    double fac = 0.4 + 0.3 * sin(offset);
                     double drop = 5;
- // move_sound
                     ALLEGRO_COLOR temp =  al_map_rgb(fac*255,fac*232,fac*105);
-                    if (!p.is_valid_move(x,y)) temp = al_map_rgb(fac*255/drop,fac*232/drop,fac*105/drop);
+                    if (!p.is_valid_move(x,y) || !is_valid_move(x,y)) temp = al_map_rgb(fac*255/drop,fac*232/drop,fac*105/drop);
                     al_draw_rectangle(
                         screen.x,
                         screen.y,
@@ -342,20 +385,16 @@ int main(int, char**) {
     bool redraw = true;
     ALLEGRO_EVENT event;
     
-    // Define State
+
+    // 恆存の Game Object & status
     GameState state = MENU;
-
-    // Game Objects
     Level level;
+    Level title_level;
     Player player;
-    level.load_level("level.txt", player);
-    bool turn_ready = false;
+    title_level.load_level("title_level.txt", player);
 
-    // Menu Button Variables
-    double btn_x = WINDOW_W / 2 - 100;
-    double btn_y = WINDOW_H / 2 - 30;
-    double btn_w = 200;
-    double btn_h = 60;
+    level = title_level;
+    bool turn_ready = false;
 
     al_start_timer(timer);
     memset(key, 0, sizeof(key));
@@ -374,26 +413,13 @@ int main(int, char**) {
         }
         else if (event.type == ALLEGRO_EVENT_MOUSE_AXES) {
             // to draw preview
-            if (state == MENU) { 
-
-            }
-            else if (state == PLAYING) { 
-                Vec2 pull_back_mouse = level.invaffine(Vec2(event.mouse.x,event.mouse.y));
-                int grid_x = pull_back_mouse.x / TILE_SIZE;
-                int grid_y = pull_back_mouse.y / TILE_SIZE;
-                player.selecting_pos = Vec2(grid_x,grid_y);
-            }
+            Vec2 pull_back_mouse = level.invaffine(Vec2(event.mouse.x,event.mouse.y));
+            int grid_x = pull_back_mouse.x / TILE_SIZE;
+            int grid_y = pull_back_mouse.y / TILE_SIZE;
+            player.selecting_pos = Vec2(grid_x,grid_y);
         }
         else if (event.type == ALLEGRO_EVENT_MOUSE_BUTTON_DOWN) {
-            if (state == MENU) {
-                // Check if mouse click is inside the Start Button
-                if (event.mouse.x >= btn_x && event.mouse.x <= btn_x + btn_w &&
-                    event.mouse.y >= btn_y && event.mouse.y <= btn_y + btn_h) {
-                    state = PLAYING; // Switch to game
-                    printf("Game Started!\n");
-                }
-            }
-            else if (state == PLAYING) { 
+            if (state == PLAYING || state == MENU) { 
                 // mouse
                 Vec2 pull_back_mouse = level.invaffine(Vec2(event.mouse.x,event.mouse.y));
                 int grid_x = pull_back_mouse.x / TILE_SIZE;
@@ -412,18 +438,33 @@ int main(int, char**) {
                 else done = true; // Esc at menu to quit
             }
             
-            if (state == PLAYING && event.keyboard.keycode == ALLEGRO_KEY_SPACE && turn_ready) {
+            if ((state == PLAYING || state == MENU) && event.keyboard.keycode == ALLEGRO_KEY_SPACE && turn_ready) {
                 al_play_sample(move_sound,1.0,0,1.0,ALLEGRO_PLAYMODE_ONCE,NULL);
                 player.grid_pos = player.selected_pos;
                 turn_ready = false;
 
-                if (level.grid[player.grid_pos.x][player.grid_pos.y] == TILE_GOAL) {
-                    printf("YOU WIN!\n");
-                    state = MENU;
-                    level.load_level("level.txt", player);
+
+                int current_tile = level.grid[(int)player.grid_pos.x][(int)player.grid_pos.y];
+                if (current_tile == TILE_GOAL) {
+                    if (state != MENU) {
+                        printf("YOU WIN!\n");
+                        state = MENU;
+                        level.load_level("title_level.txt", player);
+                    }
                 } 
+                else if(current_tile == TILE_SIGN){
+                    state = READING_SIGN;
+                }
                 else {
                     level.grow_walls(player);
+                }
+            }
+            else if (state == READING_SIGN){
+                if(event.keyboard.keycode == ALLEGRO_KEY_ENTER || event.keyboard.keycode == ALLEGRO_KEY_SPACE){
+                    state = PLAYING;
+                    
+                    level.grow_walls(player);
+                    player.selected_pos = player.grid_pos;
                 }
             }
         }
@@ -431,34 +472,76 @@ int main(int, char**) {
         if (redraw && al_is_event_queue_empty(queue)) {
             al_clear_to_color(al_map_rgb(0, 0, 0));
 
+            // --- DRAW GAME ---
+            if(state == PLAYING || state == READING_SIGN || state == MENU) {
+                level.draw(player);
+
+                if (state != MENU) {
+                    al_draw_text(info_font, al_map_rgb(255, 255, 255), 10, WINDOW_H - 30, 0, "Press ESC to return to Menu");
+                }
+                if(state == READING_SIGN){
+                    double cx = WINDOW_W / 2;
+                    double cy = WINDOW_H / 2;
+                    al_draw_filled_rectangle(cx - 200, cy - 60, cx + 200, cy + 40, al_map_rgb(0, 0, 50));
+                    al_draw_rectangle(cx - 200, cy - 60, cx + 200, cy + 40, al_map_rgb(255, 255, 255), 4);
+                    al_draw_text(info_font, al_map_rgb(255, 255, 0), cx, cy - info_font_height, ALLEGRO_ALIGN_CENTER, "WARNING!");
+                    al_draw_text(info_font, al_map_rgb(255, 255, 255), cx, cy + 2*info_font_height, ALLEGRO_ALIGN_CENTER, "Red walls will spread like fire.");
+                    al_draw_text(info_font, al_map_rgb(150, 150, 150), cx, cy + 4*info_font_height, ALLEGRO_ALIGN_CENTER, "Press SPACE to continue...");
+                }
+            }
             // --- DRAW MENU ---
             if (state == MENU) {
                 // Draw Title
-                al_draw_text(title_font, al_map_rgb(255, 255, 255), WINDOW_W/2, WINDOW_H/2 - 150, ALLEGRO_ALIGN_CENTER, "A N G E L   P R O B L E M");
+                const char *parts[] = {
+                    "A", " N G E L     ", "P", " R O B L E M"
+                };
 
-                // Draw Start Button
-                al_draw_filled_rectangle(btn_x, btn_y, btn_x + btn_w, btn_y + btn_h, al_map_rgb(100, 100, 100));
-                al_draw_rectangle(btn_x, btn_y, btn_x + btn_w, btn_y + btn_h, al_map_rgb(255, 255, 255), 2);
-                al_draw_text(info_font, al_map_rgb(255, 255, 255), WINDOW_W/2, btn_y + 20, ALLEGRO_ALIGN_CENTER, "START");
+                ALLEGRO_COLOR blue = al_map_rgba(80,140,255,120);
+                ALLEGRO_COLOR red = al_map_rgba(255, 90, 90, 120);
+                ALLEGRO_COLOR colors[] = {
+                    blue,
+                    al_map_rgb(255, 255, 255),
+                    red,
+                    al_map_rgb(255, 255, 255)
+                };
+                
+                double title_y = WINDOW_H / 4;
+                if (player.grid_pos.y == 0) title_y = WINDOW_H - title_y - title_font_height;
+
+                // total width
+                double total_w = 0;
+                for (int i = 0; i < 4; i++)
+                    total_w += al_get_text_width(title_font, parts[i]);
+
+                double title_x = WINDOW_W / 2 - total_w / 2;
+
+                // draw
+                for (int i = 0; i < 4; i++) {
+                    al_draw_text(title_font, colors[i], title_x, title_y, 0, parts[i]);
+                    title_x += al_get_text_width(title_font, parts[i]);
+                }
+
+                // // Draw Start Button
+                // al_draw_filled_rectangle(btn_x, btn_y, btn_x + btn_w, btn_y + btn_h, al_map_rgb(100, 100, 100));
+                // al_draw_rectangle(btn_x, btn_y, btn_x + btn_w, btn_y + btn_h, al_map_rgb(255, 255, 255), 2);
+                // al_draw_text(info_font, al_map_rgb(255, 255, 255), WINDOW_W/2, btn_y + 20, ALLEGRO_ALIGN_CENTER, "START");
 
                 // Draw Instructions (Below Button)
-                al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, btn_y + btn_h + info_font_height, ALLEGRO_ALIGN_CENTER, "Click grid to select move");
-                al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, btn_y + btn_h + 2*info_font_height, ALLEGRO_ALIGN_CENTER, "Press SPACE to Teleport");
+                double inst_y = WINDOW_H / 10;
+                if (player.grid_pos.y == 0) inst_y  = WINDOW_H - inst_y - 3*info_font_height;
+                al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + info_font_height, ALLEGRO_ALIGN_CENTER, "Click grid to select move");
+                al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + 2*info_font_height, ALLEGRO_ALIGN_CENTER, "Press SPACE to Teleport");
                 
                 // Draw Floor and Ceiling
-                ALLEGRO_COLOR blue = al_map_rgba(80,140,255,120);
-                float h = 22.0f, off = 8.0f;
+                double h = 22.0f, off = 8.0f;
 
                 al_draw_filled_rectangle(0,  40, WINDOW_W,  40+h, blue);
                 al_draw_filled_rectangle(0,  40+off, WINDOW_W,  40+off+h, blue);
 
                 al_draw_filled_rectangle(0, WINDOW_H-40-h, WINDOW_W, WINDOW_H-40, blue);
                 al_draw_filled_rectangle(0, WINDOW_H-40-h-off, WINDOW_W, WINDOW_H-40-off, blue);
-            }
-            // --- DRAW GAME ---
-            else if (state == PLAYING) {
-                level.draw(player);
-                al_draw_text(info_font, al_map_rgb(255, 255, 255), 10, WINDOW_H - 30, 0, "Press ESC to return to Menu");
+
+                // Draw Credit
             }
 
             al_flip_display();

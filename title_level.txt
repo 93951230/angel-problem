@@ -1,0 +1,7 @@
+tilemap
+5 3
+4 0 4 0 4
+1 4 3 4 1
+4 0 4 0 4
+scale 7
+wildness 0
