@@ -1,12 +1,6 @@
 // ===preprocessor===
 #pragma region 
-#include <vector>
-#include <string>
-#include <cmath>
-#include <iostream>
-#include <fstream>
-#include <cstdlib>
-#include <ctime>
+#include <bits/stdc++.h>
 
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_font.h>
@@ -16,7 +10,6 @@
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_ttf.h>
 
-using namespace std;
 
 #define WINDOW_W 1500
 #define WINDOW_H 1200
@@ -146,7 +139,7 @@ struct Level {
     Vec2 deviation;
     int width, height;
     std::vector<std::vector<int>> grid;
-    std::vector<std::vector<double>> exist_since;
+    std::vector<std::vector<double>> anim_since;
     Vec2 goal_pos;
     
     Level() : width(0), height(0) {}
@@ -164,7 +157,7 @@ struct Level {
                 file >> width >> height;
                 grid.assign(width, std::vector<int>(height, 0));
                 player.validmpp.assign(width, std::vector<bool>(height, 0));
-                exist_since.assign(width, std::vector<double>(height, 0));
+                anim_since.assign(width, std::vector<double>(height, 0));
                 int tile_id;
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
@@ -203,8 +196,8 @@ struct Level {
 
     void grow_walls(const Player& p) {
         std::vector<Vec2> new_walls;
-        for(int x = 0; x < width; x++) {
-            for(int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
                 if (grid[x][y] != TILE_WALL) continue;
                 if ((rand() % 100) >= 100*wildness) continue; // chance!!
                 int nx = x + (rand() % 3) - 1;
@@ -215,8 +208,8 @@ struct Level {
                 new_walls.emplace_back(Vec2(nx, ny));
             }
         }
-        for(auto& w : new_walls) {
-            exist_since[w.x][w.y] = al_get_time();
+        for (auto& w : new_walls) {
+            anim_since[w.x][w.y] = al_get_time();
             grid[w.x][w.y] = TILE_WALL;
         }
     }
@@ -237,6 +230,45 @@ struct Level {
         };
     }
 
+    void trigger_gate() {
+        for (int x = 0; x < width; x++){
+            for (int y = 0; y < height; y++){
+                int t = grid[x][y];
+
+                // skip if not gates
+                if (t < 7 || t > 10) continue;
+                int dx = 0, dy = 0; // front dir
+                int bx = 0, by = 0; // back dir
+                if (t == TILE_GATE_N) { dy = -1; by = 1;}
+                else if (t == TILE_GATE_S) { dy = 1; by = -1;}
+                else if (t == TILE_GATE_E) { dx = 1; bx = -1;}
+                else if (t == TILE_GATE_W) { dx = -1; bx = 1;}
+
+                // pos of tile to copy from
+                int to_copy_x = x + bx;
+                int to_copy_y = y + by;
+
+                if (to_copy_x < 0 || to_copy_x >= width || to_copy_y < 0 || to_copy_y >= height) continue;
+                int tile_to_copy = grid[to_copy_x][to_copy_y];
+                if ((tile_to_copy >= 7 && tile_to_copy <= 10) || tile_to_copy == TILE_VOID) continue;
+                int cur_x = x + dx;
+                int cur_y = y + dy;
+                double tt = 0;
+                while(cur_x >= 0 && cur_x < width && cur_y >= 0 && cur_y < height){
+                    tt += 0.05;
+                    if (!is_valid_move(cur_x,cur_y)) break;
+                    if (grid[cur_x][cur_y] != tile_to_copy) {
+                        grid[cur_x][cur_y] = tile_to_copy;
+                        anim_since[cur_x][cur_y] = al_get_time() + tt;
+                    }
+                    cur_x += dx;
+                    cur_y += dy;
+                }
+            }
+        }
+    }
+
+    // the majesty draw function
     void draw(const Player& p) const {
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
@@ -247,7 +279,7 @@ struct Level {
                         - (121.0f/21.0f)*t*t
                         + (92.0f/21.0f)*t;
                 };
-                double factor = (al_get_time() - exist_since[x][y] >= 1)?1:pop(al_get_time() - exist_since[x][y]);
+                double factor = std::clamp(pop(al_get_time() - anim_since[x][y]),0.,1.);
 
                 Vec2 world = {(double)x * TILE_SIZE,(double)y * TILE_SIZE};
                 double gap = 0.04;
@@ -272,7 +304,9 @@ struct Level {
                 else if (grid[x][y] == TILE_SIGN){
 					color = al_map_rgb(255, 255, 0);
 				}
-
+                else if (grid[x][y] >= TILE_GATE_N && grid[x][y] <= TILE_GATE_W){
+                    color = al_map_rgb(170, 150, 226);
+                }
 
                 al_draw_filled_rectangle(
                     screen1.x,
@@ -281,6 +315,19 @@ struct Level {
                     screen2.y,
                     color
                 );
+
+                if (grid[x][y] >= TILE_GATE_N && grid[x][y] <= TILE_GATE_W){
+                    double cx = (screen1.x + screen2.x)/2;
+                    double cy = (screen1.y + screen2.y)/2;
+                    double off = (screen2.x - screen1.x)/3;
+
+                    if (grid[x][y] == TILE_GATE_N) cy -= off;
+                    if (grid[x][y] == TILE_GATE_S) cy += off;
+                    if (grid[x][y] == TILE_GATE_W) cx -= off;
+                    if (grid[x][y] == TILE_GATE_E) cx += off;
+
+                    al_draw_filled_circle(cx, cy, 3*scale, al_map_rgb(255,255,255));
+                }
             }
         }
 
@@ -499,16 +546,17 @@ int main(int, char**) {
                         state = MENU;
                         level.load_level("title_level.txt", player);
                     } 
-                    else if(current_tile == TILE_SIGN){
+                    else if (current_tile == TILE_SIGN){
                         state = READING_SIGN;
                     }
                     else {
                         level.grow_walls(player);
+                        level.trigger_gate();
                     }
                 }
             }
             else if (state == READING_SIGN){
-                if(event.keyboard.keycode == ALLEGRO_KEY_ENTER || event.keyboard.keycode == ALLEGRO_KEY_SPACE){
+                if (event.keyboard.keycode == ALLEGRO_KEY_ENTER || event.keyboard.keycode == ALLEGRO_KEY_SPACE){
                     state = PLAYING;
                     
                     level.grow_walls(player);
@@ -521,13 +569,13 @@ int main(int, char**) {
             al_clear_to_color(al_map_rgb(0, 0, 0));
 
             // --- DRAW GAME ---
-            if(state == PLAYING || state == READING_SIGN || state == MENU) {
+            if (state == PLAYING || state == READING_SIGN || state == MENU) {
                 level.draw(player);
 
                 if (state != MENU) {
                     al_draw_text(info_font, al_map_rgb(255, 255, 255), 10, WINDOW_H - 30, 0, "Press ESC to return to Menu");
                 }
-                if(state == READING_SIGN){
+                if (state == READING_SIGN){
                     double cx = WINDOW_W / 2;
                     double cy = WINDOW_H / 2;
                     al_draw_filled_rectangle(cx - 200, cy - 60, cx + 200, cy + 40, al_map_rgb(0, 0, 50));
