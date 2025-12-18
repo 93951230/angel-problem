@@ -259,8 +259,6 @@ struct Level {
                 screen2 = center + (screen2 - center) * factor;
 
 
-                double size = TILE_SIZE * scale;
-
                 ALLEGRO_COLOR color = al_map_rgb(20, 20, 20);
                 if (grid[x][y] == TILE_EMPTY) {
                     color = al_map_rgb(20, 20, 20);
@@ -293,8 +291,6 @@ struct Level {
                 Vec2 world = {(double)x * TILE_SIZE,(double)y * TILE_SIZE};
                 Vec2 screen1 = affine(Vec2((double)x * TILE_SIZE, (double)y * TILE_SIZE));
                 Vec2 screen2 = affine(Vec2((double)(x+1) * TILE_SIZE, (double)(y+1) * TILE_SIZE));
-
-                double size = TILE_SIZE * scale;
 
                 if (p.selected_pos.x == x && p.selected_pos.y == y) {
                     al_draw_rectangle(
@@ -597,10 +593,16 @@ int main(int, char**) {
                 // Draw Credit
 
                 // Draw Option
-                Vec2 play_opt_pos = level.affine(Vec2(1.5*TILE_SIZE, 2.5*TILE_SIZE));
-                al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), play_opt_pos.x, play_opt_pos.y, "[ Play ]",20);
-                Vec2 exit_opt_pos = level.affine(Vec2(3.5*TILE_SIZE, 2.5*TILE_SIZE));
-                al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), exit_opt_pos.x, exit_opt_pos.y, "[ Exit ]",20);
+                if (player.grid_pos.y != 0) {
+                    Vec2 play_opt_pos = level.affine(Vec2(1.5*TILE_SIZE, 2.5*TILE_SIZE));
+                    al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), play_opt_pos.x, play_opt_pos.y, "[ Play ]",20);
+                    Vec2 exit_opt_pos = level.affine(Vec2(3.5*TILE_SIZE, 2.5*TILE_SIZE));
+                    al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), exit_opt_pos.x, exit_opt_pos.y, "[ Exit ]",20);
+                }
+                else {
+                    al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), WINDOW_W/2, 5*WINDOW_H/6, "Math 27, Yu Wen Kuang, Ceng Qi Ming presents.",20);
+                    al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), WINDOW_W/2, 5*WINDOW_H/6 + 60, "~ Dec 19 2025, IP2 ~",20);
+                }
             }
 
             al_flip_display();
