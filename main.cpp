@@ -149,11 +149,15 @@ struct Level {
     std::vector<std::vector<int>> grid;
     std::vector<std::vector<int>> movdir;
     std::vector<std::vector<double>> anim_since;
-    std::string nextLvlName;
+    std::string next;
     
     Level() : width(0), height(0) {}
 
     void load_level(const char* filename, Player& player) {
+        scale = 1;
+        wildness = 0.9;
+        next = "";
+
         std::ifstream file(filename);
         if (!file.is_open()) {
             fprintf(stderr, "Error: Could not open file %s\n", filename);
@@ -188,6 +192,7 @@ struct Level {
             }
             else if (input_hint == "scale") file >> scale;
             else if (input_hint == "wildness") file >> wildness;
+            else if (input_hint == "next") file >> next;
             else if (input_hint == "endl") break;
             else {
                 fprintf(stderr, "Error: Invalid file format\n");
@@ -195,7 +200,8 @@ struct Level {
             }
         }
         file.close();
-        printf("Level loaded: %d x %d\n", width, height);
+
+        printf("Level loaded: %d x %d, name: %s\n", width, height, filename);
 
         deviation = Vec2((WINDOW_W-(scale*width*TILE_SIZE))/2, (WINDOW_H-(scale*height*TILE_SIZE))/2);
     }
@@ -580,6 +586,12 @@ struct Level {
 
 #pragma endregion
 
+// ===animation===
+#pragma region
+
+
+#pragma endregion
+
 // ===main===
 #pragma region
 int main(int, char**) {
@@ -627,6 +639,8 @@ int main(int, char**) {
     #pragma region
 
     srand(time(NULL)); // for randomness
+    double lastDeath = 0;
+    int deathCnt = 0;
     bool done = false;
     bool redraw = true;
     ALLEGRO_EVENT event;
@@ -637,7 +651,7 @@ int main(int, char**) {
     Level level;
     Level title_level;
     Player player;
-    title_level.load_level("title_level.txt", player);
+    title_level.load_level("levels/title_level.txt", player);
 
     level = title_level;
     bool turn_ready = false;
@@ -682,11 +696,25 @@ int main(int, char**) {
             if (event.keyboard.keycode == ALLEGRO_KEY_ESCAPE) {
                 if (state == PLAYING) {
                     state = MENU; // Esc to go back to menu
-                    level.load_level("title_level.txt",player);
+                    level.load_level("levels/title_level.txt",player);
                 }
                 else done = true; // Esc at menu to quit
             }
-            
+            else if (event.keyboard.keycode == ALLEGRO_KEY_TAB) {
+                if (state == PLAYING) {
+                    const std::string s = level.next;
+                    if (s.empty() || (s.size() == 1 && 10 <= s[0] && s[0] <= 15)) {
+                        level.load_level("levels/title_level.txt",player);
+                        state = MENU;
+                    }
+                    else {
+                        char filename[100] = "levels/";
+                        for (size_t i=0;i<level.next.size();i++) filename[i+7] = level.next[i];
+                        level.load_level(filename, player);
+                    }
+                }
+            }
+    
             if ((state == PLAYING || state == MENU) && event.keyboard.keycode == ALLEGRO_KEY_SPACE && turn_ready) {
                 al_play_sample(move_sound,1.0,0,1.0,ALLEGRO_PLAYMODE_ONCE,NULL);
                 player.grid_pos = player.selected_pos;
@@ -697,17 +725,25 @@ int main(int, char**) {
                     int gx = player.grid_pos.x, gy = player.grid_pos.y;
                     if (gx == 1 && gy == 2) {
                         state = PLAYING;
-                        level.load_level("levels/level.txt",player);
+                        level.load_level("levels/level1.txt",player);
                     }
                     if (gx == 3 && gy == 2) {
                         done = true;
                         break;
                     }
                 }
-                else {
+                else if (state == PLAYING){
                     if (current_tile == TILE_GOAL) {
-                        state = MENU;
-                        level.load_level("./levels/title_level.txt", player);
+                        const std::string s = level.next;
+                        if (s.empty() || (s.size() == 1 && 10 <= s[0] && s[0] <= 15)) {
+                            level.load_level("levels/title_level.txt",player);
+                            state = MENU;
+                        }
+                        else {
+                            char filename[100] = "levels/";
+                            for (size_t i=0;i<level.next.size();i++) filename[i+7] = level.next[i];
+                            level.load_level(filename, player);
+                        }
                     } 
                     else if (current_tile == TILE_SIGN){
                         state = READING_SIGN;
