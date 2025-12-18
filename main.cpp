@@ -67,11 +67,44 @@ ALLEGRO_SAMPLE* move_sound;
 
 // ===helpers===
 #pragma region
+
 void must_init(bool test, const char *desc) {
     if (test) return;
     fprintf(stderr,"[Error] Couldn't initialize %s\n", desc);
     exit(1);
 }
+
+void al_draw_text_bg_center (
+    ALLEGRO_FONT* font,
+    ALLEGRO_COLOR text_color,
+    ALLEGRO_COLOR bg_color,
+    double cx, double cy,
+    const char* text,
+    double padding = 4.0f
+) {
+    int tx, ty, tw, th;
+    al_get_text_dimensions(font, text, &tx, &ty, &tw, &th);
+
+    // Text top-left so that bounding box is centered at (cx, cy)
+    double text_x = cx - (tw / 2.0f) - tx;
+    double text_y = cy - (th / 2.0f) - ty;
+
+    // Background rectangle
+    double bx = cx - tw / 2.0f - padding;
+    double by = cy - th / 2.0f - padding;
+    double bw = tw + 2 * padding;
+    double bh = th + 2 * padding;
+
+    // Optional: snap to pixel grid for crisp rendering
+    bx = floorf(bx);
+    by = floorf(by);
+    text_x = floorf(text_x);
+    text_y = floorf(text_y);
+
+    al_draw_filled_rectangle(bx, by, bx + bw, by + bh, bg_color);
+    al_draw_text(font, text_color, text_x, text_y, 0, text);
+}
+
 
 struct Vec2{
     double x, y;
@@ -79,6 +112,15 @@ struct Vec2{
     Vec2(double _x, double _y): x(_x), y(_y) {}
     bool operator==(const Vec2& v) const { return x == v.x && y == v.y; }
     double dist(const Vec2& v) const { return sqrt(pow(x - v.x, 2) + pow(y - v.y, 2)); }
+    Vec2 operator-() const {return Vec2(-x, -y);}
+    Vec2 operator+(const Vec2& o) const { return Vec2(x + o.x, y + o.y); }
+    Vec2 operator-(const Vec2& o) const { return Vec2(x - o.x, y - o.y); }
+    Vec2& operator+=(const Vec2& o) { x += o.x; y += o.y; return *this; }
+    Vec2& operator-=(const Vec2& o) { x -= o.x; y -= o.y; return *this; }
+    Vec2 operator*(double s) const { return Vec2(x * s, y * s); }
+    Vec2 operator/(double s) const { return Vec2(x / s, y / s); }
+    Vec2& operator*=(double s) { x *= s; y *= s; return *this; }
+    Vec2& operator/=(double s) { x /= s; y /= s; return *this; }
 };
 #pragma endregion
 
@@ -170,7 +212,7 @@ struct Level {
                 if (!(nx >= 0 && nx < width && ny >= 0 && ny < height)) continue;
                 if (nx == p.grid_pos.x && ny == p.grid_pos.y) continue;
                 if (!(grid[nx][ny] == TILE_EMPTY && grid[nx][ny] != TILE_GOAL)) continue;
-                new_walls.push_back(Vec2(nx, ny));
+                new_walls.emplace_back(Vec2(nx, ny));
             }
         }
         for(auto& w : new_walls) {
@@ -199,10 +241,23 @@ struct Level {
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 if (grid[x][y] == TILE_VOID) continue;
+                
+                static auto pop = [&](double t) -> double {
+                    return (50.0f/21.0f)*t*t*t
+                        - (121.0f/21.0f)*t*t
+                        + (92.0f/21.0f)*t;
+                };
+                double factor = (al_get_time() - exist_since[x][y] >= 1)?1:pop(al_get_time() - exist_since[x][y]);
 
                 Vec2 world = {(double)x * TILE_SIZE,(double)y * TILE_SIZE};
-                Vec2 screen1 = affine(Vec2((double)x * TILE_SIZE, (double)y * TILE_SIZE));
-                Vec2 screen2 = affine(Vec2((double)(x+1) * TILE_SIZE, (double)(y+1) * TILE_SIZE));
+                double gap = 0.04;
+                Vec2 screen1 = affine(Vec2((x+gap) * TILE_SIZE, (y+gap) * TILE_SIZE));
+                Vec2 screen2 = affine(Vec2((x+(1-gap)) * TILE_SIZE, (y+(1-gap)) * TILE_SIZE));
+
+                Vec2 center = (screen1 + screen2) * 0.5;
+                screen1 = center + (screen1 - center) * factor;
+                screen2 = center + (screen2 - center) * factor;
+
 
                 double size = TILE_SIZE * scale;
 
@@ -220,12 +275,6 @@ struct Level {
 					color = al_map_rgb(255, 255, 0);
 				}
 
-                static auto pop = [&](double t) -> double {
-                    return (50.0f/21.0f)*t*t*t
-                        - (121.0f/21.0f)*t*t
-                        + (92.0f/21.0f)*t;
-                };
-                double factor = (al_get_time() - exist_since[x][y] >= 1)?1:pop(al_get_time() - exist_since[x][y]);
 
                 al_draw_filled_rectangle(
                     screen1.x,
@@ -262,6 +311,7 @@ struct Level {
                     double offset = abs(fmod(t,M_PI));
                     double fac = 0.4 + 0.3 * sin(offset);
                     double drop = 5;
+
                     ALLEGRO_COLOR temp =  al_map_rgb(fac*255,fac*232,fac*105);
                     if (!p.is_valid_move(x,y) || !is_valid_move(x,y)) temp = al_map_rgb(fac*255/drop,fac*232/drop,fac*105/drop);
                     al_draw_rectangle(
@@ -275,7 +325,7 @@ struct Level {
                 }
             }
         }
-        
+
         // ---draw player---
         #pragma region
 
@@ -424,7 +474,10 @@ int main(int, char**) {
         }
         else if (event.type == ALLEGRO_EVENT_KEY_DOWN) {
             if (event.keyboard.keycode == ALLEGRO_KEY_ESCAPE) {
-                if (state == PLAYING) state = MENU; // Esc to go back to menu
+                if (state == PLAYING) {
+                    state = MENU; // Esc to go back to menu
+                    level.load_level("title_level.txt",player);
+                }
                 else done = true; // Esc at menu to quit
             }
             
@@ -433,20 +486,29 @@ int main(int, char**) {
                 player.grid_pos = player.selected_pos;
                 turn_ready = false;
 
-
                 int current_tile = level.grid[(int)player.grid_pos.x][(int)player.grid_pos.y];
-                if (current_tile == TILE_GOAL) {
-                    if (state != MENU) {
-                        printf("YOU WIN!\n");
-                        state = MENU;
-                        level.load_level("title_level.txt", player);
+                if (state == MENU) {
+                    int gx = player.grid_pos.x, gy = player.grid_pos.y;
+                    if (gx == 1 && gy == 2) {
+                        state = PLAYING;
+                        level.load_level("level.txt",player);
                     }
-                } 
-                else if(current_tile == TILE_SIGN){
-                    state = READING_SIGN;
+                    if (gx == 3 && gy == 2) {
+                        done = true;
+                        break;
+                    }
                 }
                 else {
-                    level.grow_walls(player);
+                    if (current_tile == TILE_GOAL) {
+                        state = MENU;
+                        level.load_level("title_level.txt", player);
+                    } 
+                    else if(current_tile == TILE_SIGN){
+                        state = READING_SIGN;
+                    }
+                    else {
+                        level.grow_walls(player);
+                    }
                 }
             }
             else if (state == READING_SIGN){
@@ -518,9 +580,10 @@ int main(int, char**) {
 
                 // Draw Instructions (Below Button)
                 double inst_y = WINDOW_H / 10;
-                if (player.grid_pos.y == 0) inst_y  = WINDOW_H - inst_y - 3*info_font_height;
-                al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + info_font_height, ALLEGRO_ALIGN_CENTER, "Click grid to select move");
-                al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + 2*info_font_height, ALLEGRO_ALIGN_CENTER, "Press SPACE to Teleport");
+                if (player.grid_pos.y != 0) {
+                    al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + info_font_height, ALLEGRO_ALIGN_CENTER, "Click grid to select move");
+                    al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + 2*info_font_height, ALLEGRO_ALIGN_CENTER, "Press SPACE to Teleport");
+                }
                 
                 // Draw Floor and Ceiling
                 double h = 22.0f, off = 8.0f;
@@ -532,6 +595,12 @@ int main(int, char**) {
                 al_draw_filled_rectangle(0, WINDOW_H-40-h-off, WINDOW_W, WINDOW_H-40-off, blue);
 
                 // Draw Credit
+
+                // Draw Option
+                Vec2 play_opt_pos = level.affine(Vec2(1.5*TILE_SIZE, 2.5*TILE_SIZE));
+                al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), play_opt_pos.x, play_opt_pos.y, "[ Play ]",20);
+                Vec2 exit_opt_pos = level.affine(Vec2(3.5*TILE_SIZE, 2.5*TILE_SIZE));
+                al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), exit_opt_pos.x, exit_opt_pos.y, "[ Exit ]",20);
             }
 
             al_flip_display();
