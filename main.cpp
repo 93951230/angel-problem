@@ -185,6 +185,7 @@ struct Level {
                             } 
                             else if (tile_id == TILE_MOVE_REV_H || tile_id == TILE_MOVE_REV_V) {
                                 movdir[x][y] = -1;
+                                grid[x][y] -= 2;
                             } 
                         }
                     }
@@ -233,7 +234,7 @@ struct Level {
 
                 if (t == TILE_MOVE_H) dx = movdir[x][y];
                 else if (t == TILE_MOVE_V) dy = movdir[x][y];
-                else continue; // safety
+                else continue;
 
                 int new_x = x + dx;
                 int new_y = y + dy;
@@ -334,7 +335,7 @@ struct Level {
                     if (grid[cur_x][cur_y] == tile_to_copy || (cur_x == p.grid_pos.x && cur_y == p.grid_pos.y)) break;
                     grid[cur_x][cur_y] = tile_to_copy;
                     if (movdir[cur_x][cur_y]) movdir[cur_x][cur_y] = 0;
-                    if (11 <= tile_to_copy && tile_to_copy <= 14) movdir[cur_x][cur_y] = movdir[to_copy_x][to_copy_y];
+                    if (11 <= tile_to_copy && tile_to_copy <= 12) movdir[cur_x][cur_y] = movdir[to_copy_x][to_copy_y];
                     anim_since[cur_x][cur_y] = al_get_time() + tt;
                     cur_x += dx;
                     cur_y += dy;
@@ -379,10 +380,10 @@ struct Level {
                 else if (grid[x][y] >= TILE_GATE_N && grid[x][y] <= TILE_GATE_W) { 
                     color = al_map_rgb(170, 150, 226);
                 }
-                else if (grid[x][y] == TILE_MOVE_H || grid[x][y] == TILE_MOVE_REV_H) {
+                else if (grid[x][y] == TILE_MOVE_H) {
                     color = al_map_rgb(255, 165, 0);
                 } 
-                else if (grid[x][y] == TILE_MOVE_V || grid[x][y] == TILE_MOVE_REV_V) {
+                else if (grid[x][y] == TILE_MOVE_V) {
                     color = al_map_rgb(50, 205, 50);
                 }
 
@@ -449,7 +450,7 @@ struct Level {
                         al_map_rgb(20, 20, 20)
                     );
                 }
-                else if (11 <= grid[x][y] && grid[x][y] <= 14) {
+                else if (11 <= grid[x][y] && grid[x][y] <= 12) {
                     double edge_thickness = 0.12 * (screen2.x - screen1.x);
                     ALLEGRO_COLOR edge_dark = al_map_rgb(120, 90, 40);   // for H
                     ALLEGRO_COLOR edge_dark_v = al_map_rgb(30, 140, 30); // for V
