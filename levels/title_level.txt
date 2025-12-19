@@ -5,3 +5,4 @@ tilemap
 4 0 4 0 4
 scale 7
 wildness 0
+next level1.txt

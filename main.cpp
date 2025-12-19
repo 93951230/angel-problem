@@ -33,11 +33,8 @@
 // Moving Tile
 #define TILE_MOVE_H 11
 #define TILE_MOVE_V 12
-// NGATE
-#define TILE_NGATE_N 13
-#define TILE_NGATE_S 14
-#define TILE_NGATE_E 15
-#define TILE_NGATE_W 16
+#define TILE_MOVE_REV_H 13  
+#define TILE_MOVE_REV_V 14
 
 std::vector<int> is_space = {0,2,3,6};
 
@@ -132,16 +129,15 @@ struct Player {
     Vec2 grid_pos;
     Vec2 selected_pos;
     Vec2 selecting_pos;
-    int move_range;
+    int power;
     std::vector<std::vector<bool>> validmpp;
-    Player(): grid_pos(0,0), selected_pos(0,0), move_range(3) {} 
+    Player(): grid_pos(0,0), selected_pos(0,0), power(3) {} 
     bool is_valid_move(int x, int y) const {
-        return grid_pos.dist(Vec2(x,y)) <= move_range;
+        return grid_pos.dist(Vec2(x,y)) <= power;
     }
 };
 
 struct Level {
-    // scaling to fit
     double scale = 1;
     double wildness = 0.9;
     Vec2 deviation;
@@ -157,6 +153,7 @@ struct Level {
         scale = 1;
         wildness = 0.9;
         next = "";
+        player.power = 3;
 
         std::ifstream file(filename);
         if (!file.is_open()) {
@@ -186,11 +183,15 @@ struct Level {
                             else if (tile_id == TILE_MOVE_H || tile_id == TILE_MOVE_V) {
                                 movdir[x][y] = 1;
                             } 
+                            else if (tile_id == TILE_MOVE_REV_H || tile_id == TILE_MOVE_REV_V) {
+                                movdir[x][y] = -1;
+                            } 
                         }
                     }
                 }
             }
             else if (input_hint == "scale") file >> scale;
+            else if (input_hint == "power") file >> player.power;
             else if (input_hint == "wildness") file >> wildness;
             else if (input_hint == "next") file >> next;
             else if (input_hint == "endl") break;
@@ -216,7 +217,6 @@ struct Level {
         static int next_grid[500][500];
         static int next_movdir[500][500];
 
-        // initialize next state as empty
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 next_grid[x][y] = grid[x][y];
@@ -224,10 +224,8 @@ struct Level {
             }
         }
 
-        // process movers
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
-
                 if (!movdir[x][y]) continue;
 
                 int t = grid[x][y];
@@ -250,11 +248,10 @@ struct Level {
                     blocked = true;
 
                 if (blocked) {
-                    // stay, reverse direction
                     next_grid[x][y] = t;
                     next_movdir[x][y] = -movdir[x][y];
-                } else {
-                    // move
+                } 
+                else {
                     next_grid[new_x][new_y] = t;
                     next_movdir[new_x][new_y] = movdir[x][y];
                     next_grid[x][y] = TILE_EMPTY;
@@ -262,7 +259,6 @@ struct Level {
             }
         }
 
-        // commit
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 grid[x][y] = next_grid[x][y];
@@ -333,12 +329,12 @@ struct Level {
                 int cur_x = x + dx;
                 int cur_y = y + dy;
                 double tt = 0;
-                while(cur_x >= 0 && cur_x < width && cur_y >= 0 && cur_y < height){
+                while(cur_x >= 0 && cur_x < width && cur_y >= 0 && cur_y < height) {
                     tt += 0.05;
                     if (grid[cur_x][cur_y] == tile_to_copy || (cur_x == p.grid_pos.x && cur_y == p.grid_pos.y)) break;
                     grid[cur_x][cur_y] = tile_to_copy;
                     if (movdir[cur_x][cur_y]) movdir[cur_x][cur_y] = 0;
-                    if (tile_to_copy == TILE_MOVE_H || tile_to_copy == TILE_MOVE_V) movdir[cur_x][cur_y] = 1;
+                    if (11 <= tile_to_copy && tile_to_copy <= 14) movdir[cur_x][cur_y] = movdir[to_copy_x][to_copy_y];
                     anim_since[cur_x][cur_y] = al_get_time() + tt;
                     cur_x += dx;
                     cur_y += dy;
@@ -383,10 +379,10 @@ struct Level {
                 else if (grid[x][y] >= TILE_GATE_N && grid[x][y] <= TILE_GATE_W) { 
                     color = al_map_rgb(170, 150, 226);
                 }
-                else if (grid[x][y] == TILE_MOVE_H) {
+                else if (grid[x][y] == TILE_MOVE_H || grid[x][y] == TILE_MOVE_REV_H) {
                     color = al_map_rgb(255, 165, 0);
                 } 
-                else if (grid[x][y] == TILE_MOVE_V) {
+                else if (grid[x][y] == TILE_MOVE_V || grid[x][y] == TILE_MOVE_REV_V) {
                     color = al_map_rgb(50, 205, 50);
                 }
 
@@ -453,7 +449,7 @@ struct Level {
                         al_map_rgb(20, 20, 20)
                     );
                 }
-                else if (grid[x][y] == TILE_MOVE_H || grid[x][y] == TILE_MOVE_V) {
+                else if (11 <= grid[x][y] && grid[x][y] <= 14) {
                     double edge_thickness = 0.12 * (screen2.x - screen1.x);
                     ALLEGRO_COLOR edge_dark = al_map_rgb(120, 90, 40);   // for H
                     ALLEGRO_COLOR edge_dark_v = al_map_rgb(30, 140, 30); // for V
@@ -495,8 +491,6 @@ struct Level {
                         );
                     }
                 }
-
-
             }
         }
 
@@ -589,6 +583,46 @@ struct Level {
 // ===animation===
 #pragma region
 
+double lastAnimTime = 0.0;
+bool in_transition = false;
+bool map_swapped   = false;
+const double COVER_TIME = 0.35; 
+const double HOLD_TIME = 0.10;
+const double UNCOVER_TIME = 0.35;
+const double TOTAL_TIME = COVER_TIME + HOLD_TIME + UNCOVER_TIME;
+bool draw_black_swipe(double lastAnimTime) {
+    double t = al_get_time() - lastAnimTime;
+
+    if (t >= COVER_TIME + HOLD_TIME + UNCOVER_TIME)
+        return false; 
+
+    double left = 0.0;
+    double right = 0.0;
+
+    if (t < COVER_TIME) {
+        double u = t / COVER_TIME; 
+        left  = 0.0;
+        right = WINDOW_W * u;
+    }
+    else if (t < COVER_TIME + HOLD_TIME) {
+        left  = 0.0;
+        right = WINDOW_W;
+    }
+    else {
+        double u = (t - COVER_TIME - HOLD_TIME) / UNCOVER_TIME; 
+        left  = WINDOW_W * u;
+        right = WINDOW_W;
+    }
+
+    al_draw_filled_rectangle(
+        left, 0,
+        right, WINDOW_H,
+        al_map_rgb(0, 0, 0)
+    );
+
+    return true;
+}
+
 
 #pragma endregion
 
@@ -638,8 +672,7 @@ int main(int, char**) {
     // ---our OWN variables---
     #pragma region
 
-    srand(time(NULL)); // for randomness
-    double lastDeath = 0;
+    srand(time(NULL));
     int deathCnt = 0;
     bool done = false;
     bool redraw = true;
@@ -652,6 +685,8 @@ int main(int, char**) {
     Level title_level;
     Player player;
     title_level.load_level("levels/title_level.txt", player);
+    std::string curr_filename = "title_level.txt";
+    bool retried = false;
 
     level = title_level;
     bool turn_ready = false;
@@ -724,8 +759,9 @@ int main(int, char**) {
                 if (state == MENU) {
                     int gx = player.grid_pos.x, gy = player.grid_pos.y;
                     if (gx == 1 && gy == 2) {
-                        state = PLAYING;
-                        level.load_level("levels/level1.txt",player);
+                        lastAnimTime = al_get_time();
+                        in_transition = true;
+                        map_swapped = false;
                     }
                     if (gx == 3 && gy == 2) {
                         done = true;
@@ -734,16 +770,9 @@ int main(int, char**) {
                 }
                 else if (state == PLAYING){
                     if (current_tile == TILE_GOAL) {
-                        const std::string s = level.next;
-                        if (s.empty() || (s.size() == 1 && 10 <= s[0] && s[0] <= 15)) {
-                            level.load_level("levels/title_level.txt",player);
-                            state = MENU;
-                        }
-                        else {
-                            char filename[100] = "levels/";
-                            for (size_t i=0;i<level.next.size();i++) filename[i+7] = level.next[i];
-                            level.load_level(filename, player);
-                        }
+                        lastAnimTime = al_get_time();
+                        in_transition = true;
+                        map_swapped = false;
                     } 
                     else if (current_tile == TILE_SIGN){
                         state = READING_SIGN;
@@ -759,9 +788,47 @@ int main(int, char**) {
                 if (event.keyboard.keycode == ALLEGRO_KEY_ENTER || event.keyboard.keycode == ALLEGRO_KEY_SPACE){
                     state = PLAYING;
                     
+                    level.update_movers(player);
+                    level.trigger_gate(player);
                     level.grow_walls(player);
                     player.selected_pos = player.grid_pos;
                 }
+            }
+
+            if (state == PLAYING && event.keyboard.keycode == ALLEGRO_KEY_R) {
+                lastAnimTime = al_get_time();
+                in_transition = true;
+                map_swapped = false;
+                retried = true;
+            }
+        }
+
+        // change level
+        if (in_transition) {
+            double t = al_get_time() - lastAnimTime;
+            if (!map_swapped && t >= COVER_TIME) {
+
+                std::string s;
+                if (retried) {
+                    retried = false;
+                    s = curr_filename;
+                    std::cout << "retrying, load in " << s << '\n';
+                }
+                else s = level.next;
+
+                if (s.empty() || (s.size() == 1 && 10 <= s[0] && s[0] <= 15)) {
+                    level.load_level("levels/title_level.txt",player);
+                    state = MENU;
+                }
+                else {
+                    char filename[100] = "levels/";
+                    for (size_t i=0;i<level.next.size();i++) filename[i+7] = s[i];
+                    curr_filename = s;
+                    level.load_level(filename, player);
+                }
+
+                map_swapped = true;
+                if (state == MENU) state = PLAYING;
             }
         }
 
@@ -794,7 +861,7 @@ int main(int, char**) {
 
                 ALLEGRO_COLOR blue = al_map_rgba(80,140,255,120);
                 ALLEGRO_COLOR red = al_map_rgba(255, 90, 90, 120);
-                ALLEGRO_COLOR colors[] = {
+                ALLEGRO_COLOR colors[] = {  
                     blue,
                     al_map_rgb(255, 255, 255),
                     red,
@@ -842,6 +909,12 @@ int main(int, char**) {
                 else {
                     al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), WINDOW_W/2, 5*WINDOW_H/6, "Math 27, Yu Wen Kuang, Ceng Qi Ming presents.",20);
                     al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), WINDOW_W/2, 5*WINDOW_H/6 + 60, "~ Dec 19 2025, IP2 ~",20);
+                }
+            }
+
+            if (in_transition) {
+                if (!draw_black_swipe(lastAnimTime)) {
+                    in_transition = false; // animation finished
                 }
             }
 
