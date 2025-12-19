@@ -60,6 +60,7 @@ int title_font_height;
 ALLEGRO_FONT* title_font = NULL;
 
 ALLEGRO_SAMPLE* move_sound;
+ALLEGRO_SAMPLE* change_level_sound;
 
 #pragma endregion
 
@@ -310,7 +311,7 @@ struct Level {
                 int t = grid[x][y];
 
                 // skip if not gates
-                if (!(7 <= t && t <= 10) && !(13 <= t && t <= 16)) continue;
+                if (!(7 <= t && t <= 10)) continue;
                 bool isnot = (13 <= t && t <= 16);
                 if (isnot) t -= 6;
                 int dx = 0, dy = 0; // front dir
@@ -590,7 +591,6 @@ bool map_swapped   = false;
 const double COVER_TIME = 0.35; 
 const double HOLD_TIME = 0.10;
 const double UNCOVER_TIME = 0.35;
-const double TOTAL_TIME = COVER_TIME + HOLD_TIME + UNCOVER_TIME;
 bool draw_black_swipe(double lastAnimTime) {
     double t = al_get_time() - lastAnimTime;
 
@@ -667,6 +667,8 @@ int main(int, char**) {
 
     move_sound = al_load_sample("src/move_sound.wav");
     must_init(move_sound, "move_sound");
+    change_level_sound = al_load_sample("src/change_level_sound.wav");
+    must_init(change_level_sound, "change_level_sound");
 
     #pragma endregion
 
@@ -792,6 +794,7 @@ int main(int, char**) {
                     level.update_movers(player);
                     level.trigger_gate(player);
                     level.grow_walls(player);
+                    
                     player.selected_pos = player.grid_pos;
                 }
             }
@@ -801,6 +804,7 @@ int main(int, char**) {
                 in_transition = true;
                 map_swapped = false;
                 retried = true;
+                deathCnt++;
             }
         }
 
@@ -813,7 +817,6 @@ int main(int, char**) {
                 if (retried) {
                     retried = false;
                     s = curr_filename;
-                    std::cout << "retrying, load in " << s << '\n';
                 }
                 else s = level.next;
 
@@ -830,6 +833,8 @@ int main(int, char**) {
 
                 map_swapped = true;
                 if (state == MENU) state = PLAYING;
+
+                al_play_sample(change_level_sound,1.0,0,1.0,ALLEGRO_PLAYMODE_ONCE,NULL);
             }
         }
 
@@ -842,6 +847,7 @@ int main(int, char**) {
 
                 if (state != MENU) {
                     al_draw_text(info_font, al_map_rgb(255, 255, 255), 10, WINDOW_H - 30, 0, "Press ESC to return to Menu");
+                    al_draw_textf(info_font, al_map_rgb(200, 200, 200), 10, 10, ALLEGRO_ALIGN_LEFT, "Death Count : %d", deathCnt);
                 }
                 if (state == READING_SIGN){
                     double cx = WINDOW_W / 2;
@@ -887,8 +893,8 @@ int main(int, char**) {
                 // Draw Instructions (Below Button)
                 double inst_y = WINDOW_H / 10;
                 if (player.grid_pos.y != 0) {
-                    al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + info_font_height, ALLEGRO_ALIGN_CENTER, "Click grid to select move");
-                    al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + 2*info_font_height, ALLEGRO_ALIGN_CENTER, "Press SPACE to Teleport");
+                    al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + info_font_height, ALLEGRO_ALIGN_CENTER, "Click grey grid to select move");
+                    al_draw_text(info_font, al_map_rgb(200, 200, 200), WINDOW_W/2, inst_y + 2*info_font_height, ALLEGRO_ALIGN_CENTER, "Press [SPACE] to Teleport");
                 }
                 
                 // Draw Floor and Ceiling
@@ -936,6 +942,7 @@ int main(int, char**) {
     al_destroy_font(title_font);
 
     al_destroy_sample(move_sound);
+    al_destroy_sample(change_level_sound);
 
     #pragma endregion
 
