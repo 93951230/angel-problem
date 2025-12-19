@@ -3,7 +3,7 @@ tilemap
 1 1 1 1 1 1 1 1 1 1 1 1
 1 3 0 0 0 0 0 0 0 0 0 1
 1 0 1 1 1 1 1 1 0 1 0 1
-1 0 1 0 0 0 0 1 0 1 0 1
+1 0 1 6 0 0 0 1 0 1 0 1
 1 0 1 0 1 1 0 1 0 1 0 1
 1 0 1 0 1 1 0 1 0 1 0 1
 1 0 0 0 0 0 0 0 0 1 0 1
@@ -12,4 +12,7 @@ tilemap
 1 1 1 1 1 1 1 1 1 1 1 1
 scale 2.5
 wildness 0.4
+power 3
+msg_title WARNING:_UNSTABLE
+msg_body Red_walls_will_grow_ocassionally.
 next level3.txt

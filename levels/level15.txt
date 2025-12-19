@@ -1,0 +1,19 @@
+tilemap
+11 11
+1 1 1 1 1 1 1 1 1 1 1
+1 3 6 0 0 0 0 0 0 0 1
+1 0 0 0 0 0 0 0 0 0 1
+1 0 0 0 0 0 0 0 0 0 1
+1 0 0 0 0 0 0 0 0 0 1
+1 0 0 0 8 8 8 0 0 0 1
+1 0 0 0 0 0 0 0 0 0 1
+1 0 0 1 1 1 1 1 0 0 1
+1 0 0 1 1 2 1 1 0 0 1
+1 0 0 1 1 1 1 1 0 0 1
+1 1 1 1 1 1 1 1 1 1 1
+scale 2.5
+wildness 1.0
+power 2
+msg_title THE_ERASER
+msg_body The_gate_copies_emptiness._Let_it_breach_the_wall.
+next level16.txt

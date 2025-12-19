@@ -15,7 +15,7 @@
 #define WINDOW_H 1200
 #define FPS 60
 #define TILE_SIZE 40
-
+#define M_PI 3.14159265358979323846
 
 // Tile Types (Match your level.txt)
 #define TILE_EMPTY 0
@@ -146,6 +146,9 @@ struct Level {
     std::vector<std::vector<int>> grid;
     std::vector<std::vector<int>> movdir;
     std::vector<std::vector<double>> anim_since;
+
+    std::string sign_title = "NOTICE";
+    std::string sign_body = "...";
     std::string next;
     
     Level() : width(0), height(0) {}
@@ -155,7 +158,8 @@ struct Level {
         wildness = 0.9;
         next = "";
         player.power = 3;
-
+        sign_title = "NOTICE";
+        sign_body = "No message.";
         std::ifstream file(filename);
         if (!file.is_open()) {
             fprintf(stderr, "Error: Could not open file %s\n", filename);
@@ -195,6 +199,14 @@ struct Level {
             else if (input_hint == "scale") file >> scale;
             else if (input_hint == "power") file >> player.power;
             else if (input_hint == "wildness") file >> wildness;
+            else if (input_hint == "msg_title") {
+                file >> sign_title;
+                std::replace(sign_title.begin(), sign_title.end(), '_', ' ');
+            }
+            else if (input_hint == "msg_body") {
+                file >> sign_body;
+                std::replace(sign_body.begin(), sign_body.end(), '_', ' ');
+            }
             else if (input_hint == "next") file >> next;
             else if (input_hint == "endl") break;
             else {
@@ -327,7 +339,7 @@ struct Level {
 
                 if (to_copy_x < 0 || to_copy_x >= width || to_copy_y < 0 || to_copy_y >= height) continue;
                 int tile_to_copy = grid[to_copy_x][to_copy_y];
-                if ((tile_to_copy >= 7 && tile_to_copy <= 10) || tile_to_copy == TILE_VOID) continue;
+                if ((tile_to_copy >= 7 && tile_to_copy <= 10) || tile_to_copy == 4) continue;
                 int cur_x = x + dx;
                 int cur_y = y + dy;
                 double tt = 0;
@@ -368,7 +380,7 @@ struct Level {
                 screen2 = center + (screen2 - center) * factor;
 
 
-                ALLEGRO_COLOR color = al_map_rgb(20, 20, 20);
+                ALLEGRO_COLOR color = al_map_rgb(50, 50, 50);
                 if (grid[x][y] == TILE_WALL) {
                     color = al_map_rgb(255,118,119);
                 } 
@@ -741,6 +753,7 @@ int main(int, char**) {
             else if (event.keyboard.keycode == ALLEGRO_KEY_TAB) {
                 if (state == PLAYING) {
                     const std::string s = level.next;
+                    curr_filename = level.next;
                     if (s.empty() || (s.size() == 1 && 10 <= s[0] && s[0] <= 15)) {
                         level.load_level("levels/title_level.txt",player);
                         state = MENU;
@@ -852,11 +865,11 @@ int main(int, char**) {
                 if (state == READING_SIGN){
                     double cx = WINDOW_W / 2;
                     double cy = WINDOW_H / 2;
-                    al_draw_filled_rectangle(cx - 200, cy - 60, cx + 200, cy + 40, al_map_rgb(0, 0, 50));
-                    al_draw_rectangle(cx - 200, cy - 60, cx + 200, cy + 40, al_map_rgb(255, 255, 255), 4);
-                    al_draw_text(info_font, al_map_rgb(255, 255, 0), cx, cy - info_font_height, ALLEGRO_ALIGN_CENTER, "WARNING!");
-                    al_draw_text(info_font, al_map_rgb(255, 255, 255), cx, cy + 2*info_font_height, ALLEGRO_ALIGN_CENTER, "Red walls will spread like fire.");
-                    al_draw_text(info_font, al_map_rgb(150, 150, 150), cx, cy + 4*info_font_height, ALLEGRO_ALIGN_CENTER, "Press SPACE to continue...");
+                    al_draw_filled_rectangle(0, cy - 80, WINDOW_W, cy + 110, al_map_rgb(0, 0, 50));
+                    al_draw_rectangle(0, cy - 80, WINDOW_W, cy + 110, al_map_rgb(255, 255, 255), 4);
+                    al_draw_text(info_font, al_map_rgb(255, 255, 0), cx, cy - info_font_height - 10, ALLEGRO_ALIGN_CENTER, level.sign_title.c_str());
+                    al_draw_text(info_font, al_map_rgb(255, 255, 255), cx, cy + 10, ALLEGRO_ALIGN_CENTER, level.sign_body.c_str());
+                    al_draw_text(info_font, al_map_rgb(150, 150, 150), cx, cy + 40, ALLEGRO_ALIGN_CENTER, "Press [SPACE] to continue ...");
                 }
             }
             // --- DRAW MENU ---
@@ -914,6 +927,7 @@ int main(int, char**) {
                     al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), exit_opt_pos.x, exit_opt_pos.y, "[ Exit ]",20);
                 }
                 else {
+                    // 
                     al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), WINDOW_W/2, 5*WINDOW_H/6, "Math 27, Yu Wen Kuang, Ceng Qi Ming presents.",20);
                     al_draw_text_bg_center(info_font,al_map_rgb(200, 200, 200), al_map_rgb(0, 0, 0), WINDOW_W/2, 5*WINDOW_H/6 + 60, "~ Dec 19 2025, IP2 ~",20);
                 }

@@ -10,8 +10,11 @@ tilemap
 1 9 0 0 0 0 0 0 0 1
 1 0 0 0 0 0 0 0 0 1
 1 0 0 0 0 0 0 0 0 1
-1 3 0 0 0 0 0 0 0 1
+1 3 6 0 0 0 0 0 0 1
 1 1 1 1 1 1 1 1 1 1
-scale 2.5
+scale 2.2
 wildness 0.4
+power 3
+msg_title THE_GATES
+msg_body Gates_clone_the_world_behind_them.
 next level5.txt

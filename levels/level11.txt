@@ -1,0 +1,18 @@
+tilemap
+10 10
+3 0 0 6 0 0 2 0 10 1
+0 0 0 0 0 0 0 4 4 4
+4 4 4 4 0 4 4 4 4 0
+4 4 4 4 0 4 4 4 0 0
+4 4 4 4 0 0 13 0 0 0
+4 4 4 4 8 4 4 4 0 13
+4 4 4 4 0 4 4 4 13 0
+4 4 4 4 0 4 4 4 0 13
+0 0 4 4 0 4 4 4 13 0
+2 0 4 4 0 4 4 4 0 13
+scale 2
+wildness 1.5
+power 4
+msg_title WRONG_WAY
+msg_body Press_R_to_restart
+next level12.txt
