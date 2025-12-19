@@ -16,5 +16,3 @@ tilemap
 scale 2.0
 wildness 0.0
 power 3
-msg_title CROSSFIRE
-msg_body Timing_is_everything._Watch_the_pattern.
