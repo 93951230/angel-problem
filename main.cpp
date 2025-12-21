@@ -15,9 +15,7 @@
 #define WINDOW_H 1200
 #define FPS 60
 #define TILE_SIZE 40
-#define M_PI 3.14159265358979323846
 
-// Tile Types (Match your level.txt)
 #define TILE_EMPTY 0
 #define TILE_WALL  1
 #define TILE_GOAL  2
@@ -254,7 +252,7 @@ struct Level {
 
                 bool blocked = false;
 
-                if (!is_valid_move(new_x, new_y))
+                if (!is_valid_move(new_x, new_y) || next_movdir[new_x][new_y])
                     blocked = true;
 
                 if (new_x == (int)player.grid_pos.x &&
